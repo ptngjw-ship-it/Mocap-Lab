@@ -1,89 +1,641 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sport Science Pose Estimator</title>
-    <link rel="stylesheet" href="style.css">
+    <title>BioDynamics Lab</title>
     
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/movenet"></script>
-    
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    
+
+    <style>
+        /* --- PRO THEME VARIABLES --- */
+        :root {
+            --bg-app: #020617;
+            --glass-panel: rgba(15, 23, 42, 0.95);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --primary: #3b82f6;
+            --accent: #10b981; 
+            --text-main: #f1f5f9;
+            --text-muted: #94a3b8;
+            --danger: #ef4444;
+        }
+
+        /* --- LAYOUT --- */
+        body { margin: 0; padding: 0; font-family: 'Inter', sans-serif; background-color: var(--bg-app); color: var(--text-main); height: 100vh; width: 100vw; overflow: hidden; display: flex; flex-direction: column; }
+
+        /* TOP SECTION: VIDEO (70% Height) */
+        #stage {
+            height: 70vh;
+            width: 100%;
+            position: relative;
+            background: radial-gradient(circle at center, #1e293b 0%, #020617 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        canvas { max-width: 100%; max-height: 100%; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        video { display: none; }
+
+        /* BOTTOM SECTION: DASHBOARD (30% Height) */
+        #dashboard {
+            height: 30vh;
+            width: 100%;
+            background: #0f172a;
+            border-top: 1px solid var(--glass-border);
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            gap: 15px;
+            overflow-x: auto; 
+            overflow-y: hidden;
+        }
+        #dashboard::-webkit-scrollbar { height: 8px; }
+        #dashboard::-webkit-scrollbar-track { background: #020617; }
+        #dashboard::-webkit-scrollbar-thumb { background: var(--primary); border-radius: 4px; }
+
+        /* CHART CARDS */
+        .chart-card {
+            min-width: 400px;
+            height: 90%;
+            background: rgba(30, 41, 59, 0.5);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 10px;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0; 
+        }
+        .chart-card h4 { margin: 0 0 5px 0; font-size: 0.8rem; color: var(--text-muted); text-align: center; font-weight: 600; letter-spacing: 0.05em; }
+        .chart-container { flex: 1; position: relative; width: 100%; overflow: hidden; }
+        .btn-close-chart { position: absolute; top: 5px; right: 5px; background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 1rem; z-index: 10; }
+        .btn-close-chart:hover { color: var(--danger); }
+
+        /* --- HUD (SIDEBAR) --- */
+        #hud {
+            position: absolute; top: 20px; right: 20px; bottom: 32vh; 
+            width: 360px;
+            background: var(--glass-panel); backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border); border-radius: 16px;
+            display: flex; flex-direction: column; z-index: 100;
+            transition: transform 0.3s ease;
+            box-shadow: -10px 0 30px rgba(0,0,0,0.3);
+        }
+        #hud.minimized { transform: translateX(400px); opacity: 0; pointer-events: none; }
+        
+        .hud-header { padding: 15px 20px; border-bottom: 1px solid var(--glass-border); display: flex; justify-content: space-between; align-items: center; }
+        .hud-header h2 { margin: 0; font-size: 1.1rem; color: var(--primary); font-weight: 700; }
+        .hud-content { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+
+        .control-group { background: rgba(0,0,0,0.2); padding: 12px; border-radius: 10px; border: 1px solid var(--glass-border); }
+        .control-label { display: block; font-size: 0.7rem; font-weight: 700; color: var(--text-muted); margin-bottom: 8px; letter-spacing: 0.05em; text-transform: uppercase; }
+        .toggle-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 0.85rem; }
+        .toggle-row input { accent-color: var(--primary); transform: scale(1.1); }
+
+        select, button { width: 100%; padding: 10px; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); border-radius: 6px; color: var(--text-main); font-size: 0.85rem; cursor: pointer; }
+        .btn-primary { background: var(--primary); border: none; font-weight: 600; }
+        .btn-danger { background: var(--danger); border: none; font-weight: 600; animation: pulse 2s infinite; }
+
+        select option { background-color: #020617; color: #f1f5f9; }
+
+        details { background: rgba(255,255,255,0.03); border-radius: 8px; overflow: hidden; border: 1px solid var(--glass-border); }
+        details summary { padding: 10px; font-size: 0.85rem; font-weight: 600; cursor: pointer; user-select: none; }
+        .metric-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .metric-name { font-size: 0.85rem; color: var(--text-main); }
+        .metric-toggles { display: flex; gap: 10px; }
+        .mini-check { display: flex; align-items: center; gap: 4px; font-size: 0.7rem; color: var(--text-muted); cursor: pointer; }
+        
+        #toggle-hud-btn { position: absolute; top: 20px; right: 20px; width: 40px; height: 40px; background: var(--glass-panel); border: 1px solid var(--glass-border); border-radius: 8px; color: var(--text-main); display: flex; justify-content: center; align-items: center; cursor: pointer; z-index: 90; }
+        .badge-container { position: absolute; top: 20px; left: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 10; pointer-events: none; }
+        .badge { padding: 5px 10px; background: var(--glass-panel); border-radius: 4px; font-size: 0.75rem; font-weight: 700; border-left: 3px solid var(--primary); }
+        #recBadge { border-left-color: var(--danger); display: none; }
+        
+        #loader { position: fixed; inset: 0; background: var(--bg-app); z-index: 999; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        .spinner { width: 40px; height: 40px; border: 4px solid rgba(255,255,255,0.1); border-top: 4px solid var(--primary); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 15px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* --- EXPORT MODAL --- */
+        #exportModal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 200; justify-content: center; align-items: center; backdrop-filter: blur(5px); }
+        .modal-card { width: 500px; background: #1e293b; border: 1px solid var(--glass-border); border-radius: 16px; padding: 25px; box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
+        .modal-header { font-size: 1.2rem; font-weight: 700; margin-bottom: 15px; color: var(--primary); }
+        .modal-desc { font-size: 0.9rem; color: var(--text-muted); margin-bottom: 20px; line-height: 1.5; }
+        .filter-option { margin-bottom: 15px; background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; cursor: pointer; border: 1px solid transparent; transition: all 0.2s; display: flex; align-items: center; }
+        .filter-option:hover { background: rgba(255,255,255,0.1); }
+        .filter-option.selected { border-color: var(--primary); background: rgba(59, 130, 246, 0.1); }
+        .filter-option input { margin-right: 15px; accent-color: var(--primary); transform: scale(1.2); }
+        .filter-label { font-weight: 600; display: block; font-size: 0.95rem; }
+        .filter-sub { font-size: 0.8rem; color: var(--text-muted); margin-top: 2px; }
+        .modal-actions { margin-top: 25px; display: flex; gap: 10px; justify-content: flex-end; }
+
+    </style>
 </head>
 <body>
+
+<div id="loader">
+    <div class="spinner"></div>
+    <div style="font-weight: 600; color: var(--text-muted);">INITIALIZING SYSTEM...</div>
+</div>
+
+<button id="toggle-hud-btn" onclick="toggleHud()">☰</button>
+
+<div class="badge-container">
+    <div class="badge" id="modelBadge">SYSTEM READY</div>
+    <div class="badge" id="recBadge">RECORDING</div>
+    <div class="badge" id="fpsBadge">FPS: 0</div>
+</div>
+
+<div id="stage">
+    <video id="video" width="640" height="480" playsinline></video>
+    <canvas id="output" width="640" height="480"></canvas>
+</div>
+
+<div id="dashboard">
+    <div style="color: var(--text-muted); font-size: 0.9rem; margin: auto; opacity: 0.5;" id="placeholder-text">
+        Select metrics from the sidebar to visualize data here.
+    </div>
+</div>
+
+<div id="hud">
+    <div class="hud-header">
+        <h2>BioDynamics Lab</h2>
+        <button onclick="toggleHud()" style="width:auto; padding:5px 10px; background:transparent; border:none;">✕</button>
+    </div>
+
+    <div class="hud-content">
+        <div class="control-group">
+            <span class="control-label">Tracking Engine</span>
+            <select id="modelSelect" onchange="changeModel()">
+                <option value="tfjs">TensorFlow (MoveNet)</option>
+                <option value="mediapipe">MediaPipe (BlazePose)</option>
+            </select>
+        </div>
+
+        <div class="control-group">
+            <span class="control-label">Visual Overlays</span>
+            <div class="toggle-row">
+                <span>Show Center of Mass (CoM)</span>
+                <input type="checkbox" checked onchange="state.showCoM = this.checked">
+            </div>
+            <div class="toggle-row">
+                <span>Show Angle Numbers</span>
+                <input type="checkbox" checked onchange="state.showAngles = this.checked">
+            </div>
+        </div>
+
+        <div class="control-group">
+            <span class="control-label">Signal Processing</span>
+            <div class="toggle-row">
+                <span>Enable 1€ Filter (Stabilizer)</span>
+                <input type="checkbox" checked onchange="state.useOneEuro = this.checked">
+            </div>
+        </div>
+
+        <details open style="flex:1;">
+            <summary>Joint Metrics</summary>
+            <div id="metricList"></div>
+        </details>
+        
+        <div class="control-group" style="margin-top:auto;">
+             <span class="control-label">Phase Space (Angle vs Vel)</span>
+             <div style="display:flex; gap:5px;">
+                <select id="phaseSelect"><option value="none">-- Select Joint --</option></select>
+                <button onclick="addPhasePlot()" style="width:auto;">+</button>
+             </div>
+        </div>
+
+        <div style="padding-top:10px;">
+            <button id="toggleBtn" class="btn-primary" onclick="toggleCapture()">Start Recording</button>
+            <button id="exportBtn" onclick="openExportModal()" disabled style="margin-top:8px; opacity:0.5;">Export CSV</button>
+        </div>
+    </div>
+</div>
+
+<div id="exportModal">
+    <div class="modal-card">
+        <div class="modal-header">Export Data Settings</div>
+        <div class="modal-desc">Select a signal processing method for your CSV file.</div>
+        
+        <label class="filter-option selected" onclick="selectFilter('raw')">
+            <input type="radio" name="filterType" value="raw" checked>
+            <div>
+                <span class="filter-label">Raw Data (Unfiltered)</span>
+                <span class="filter-sub">Exact output. Best for external processing.</span>
+            </div>
+        </label>
+
+        <label class="filter-option" onclick="selectFilter('oneeuro')">
+            <input type="radio" name="filterType" value="oneeuro">
+            <div>
+                <span class="filter-label">1€ Filter (Adaptive)</span>
+                <span class="filter-sub">Reduces jitter while preserving speed.</span>
+            </div>
+        </label>
+
+        <label class="filter-option" onclick="selectFilter('butter')">
+            <input type="radio" name="filterType" value="butter">
+            <div>
+                <span class="filter-label">Butterworth Low-Pass (6Hz)</span>
+                <span class="filter-sub">Smoothed curves. Standard for biomechanics.</span>
+            </div>
+        </label>
+
+        <div class="modal-actions">
+            <button onclick="document.getElementById('exportModal').style.display='none'" style="width:auto; background:transparent; border:none; color:white;">Cancel</button>
+            <button onclick="confirmExport()" class="btn-primary" style="width:auto; padding:10px 25px;">Download .CSV</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// --- CONFIGURATION ---
+const CONFIG = { width: 640, height: 480 }; 
+const METRICS = [
+    { key: 'r_shoulder', label: 'R. Shoulder' },
+    { key: 'l_shoulder', label: 'L. Shoulder' },
+    { key: 'r_elbow', label: 'R. Elbow' },
+    { key: 'l_elbow', label: 'L. Elbow' },
+    { key: 'r_hip',   label: 'R. Hip' },
+    { key: 'l_hip',   label: 'L. Hip' },
+    { key: 'r_knee',  label: 'R. Knee' },
+    { key: 'l_knee',  label: 'L. Knee' },
+    { key: 'neck',    label: 'Neck Tilt' }
+];
+
+// --- 1€ FILTER CLASS ---
+class OneEuroFilter {
+    constructor(freq, minCutoff=1.0, beta=0.0, dcutoff=1.0) {
+        this.freq=freq; this.minCutoff=minCutoff; this.beta=beta; this.dcutoff=dcutoff;
+        this.x=new LowPassFilter(this.alpha(minCutoff)); this.dx=new LowPassFilter(this.alpha(dcutoff)); this.lastTime=null;
+    }
+    alpha(cutoff) { const te=1.0/this.freq; const tau=1.0/(2*Math.PI*cutoff); return 1.0/(1.0+tau/te); }
+    filter(val, timestamp) {
+        if(this.lastTime && timestamp) this.freq=1.0/(timestamp-this.lastTime);
+        this.lastTime=timestamp;
+        const d=(this.x.lastVal!==null)?(val-this.x.lastVal)*this.freq:0.0;
+        const edx=this.dx.filterWithAlpha(d, this.alpha(this.dcutoff));
+        const cutoff=this.minCutoff+this.beta*Math.abs(edx);
+        return this.x.filterWithAlpha(val, this.alpha(cutoff));
+    }
+}
+class LowPassFilter {
+    constructor(alpha){this.alpha=alpha;this.lastVal=null;}
+    filterWithAlpha(val, alpha){
+        if(this.lastVal===null){this.lastVal=val;return val;}
+        const res=alpha*val+(1.0-alpha)*this.lastVal; this.lastVal=res; return res;
+    }
+}
+
+// --- STATE ---
+let state = {
+    model: 'tfjs', isRecording: false, detector: null, rafId: null,
+    showCoM: true, showAngles: true, useOneEuro: true, hudOpen: true,
+    startT: 0, prevT: 0, data: [], 
+    prevAngles: {}, currVels: {},
+    filters: {}, charts: {}
+};
+
+// --- DOM ELEMENTS ---
+const video = document.getElementById('video');
+const ctx = document.getElementById('output').getContext('2d');
+const loader = document.getElementById('loader');
+const fpsBadge = document.getElementById('fpsBadge');
+const dashboard = document.getElementById('dashboard');
+
+// --- INITIALIZATION ---
+async function init() {
+    populateUI();
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { width: CONFIG.width, height: CONFIG.height, frameRate: { ideal: 60 } } });
+        video.srcObject = stream;
+        await new Promise(r => video.onloadedmetadata = r);
+        video.play();
+        await loadModel('tfjs');
+    } catch (e) { alert(e.message); loader.style.display='none'; }
+}
+
+function populateUI() {
+    const list = document.getElementById('metricList');
+    const phaseSel = document.getElementById('phaseSelect');
     
-    <header>
-        <h1>Kinematic Joint Analyzer (Pose Estimator)</h1>
-        <p>Analyze joint angles in real-time from webcam or uploaded video.</p>
-    </header>
+    METRICS.forEach(m => {
+        // Metric List
+        const row = document.createElement('div'); row.className = 'metric-item';
+        row.innerHTML = `
+            <span class="metric-name">${m.label}</span>
+            <div class="metric-toggles">
+                <label class="mini-check"><input type="checkbox" id="cb_ang_${m.key}" onchange="toggleChart('${m.key}', 'angle', '${m.label} Angle')"> Angle</label>
+                <label class="mini-check"><input type="checkbox" id="cb_vel_${m.key}" onchange="toggleChart('${m.key}', 'velocity', '${m.label} Vel.')"> Vel</label>
+            </div>
+        `;
+        list.appendChild(row);
 
-    <main>
+        // Phase Selector
+        const opt = document.createElement('option'); opt.value = m.key; opt.textContent = m.label;
+        phaseSel.appendChild(opt);
+
+        // Filters
+        state.filters[m.key] = new OneEuroFilter(30, 1.0, 0.007, 1.0);
+    });
+    // Add specific filter for neck to avoid shared state conflict
+    state.filters['neck'] = new OneEuroFilter(30, 1.0, 0.007, 1.0); 
+}
+
+// --- MODEL HANDLING ---
+async function changeModel() { await loadModel(document.getElementById('modelSelect').value); }
+async function loadModel(type) {
+    cancelAnimationFrame(state.rafId);
+    state.model = type; loader.style.display = 'flex';
+    if(state.detector?.dispose) state.detector.dispose();
+    state.detector = null;
+
+    if (type === 'tfjs') {
+        await tf.setBackend('webgl'); 
+        state.detector = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, { modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING });
+        loopLocal();
+    } else {
+        const pose = new Pose({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`});
+        pose.setOptions({ modelComplexity: 1, smoothLandmarks: true });
+        pose.onResults(onMediaPipeResults);
+        state.detector = pose;
+        loopMediaPipe();
+    }
+    loader.style.display = 'none';
+}
+
+// --- LOOPS ---
+let lastTimeFPS = 0;
+let frameCount = 0;
+
+async function loopLocal() {
+    if(state.model !== 'tfjs') return;
+    const t = performance.now();
+    updateFPS(t);
+    
+    const poses = await state.detector.estimatePoses(video);
+    drawAndProcess(poses.length ? normalizeTFJS(poses[0].keypoints) : null, t/1000);
+    
+    state.rafId = requestAnimationFrame(loopLocal);
+}
+
+async function loopMediaPipe() {
+    if(state.model !== 'mediapipe') return;
+    const t = performance.now();
+    updateFPS(t);
+    
+    await state.detector.send({image: video});
+    if(state.model === 'mediapipe') requestAnimationFrame(loopMediaPipe); 
+}
+function onMediaPipeResults(results) { 
+    drawAndProcess(results.poseLandmarks ? normalizeMediaPipe(results.poseLandmarks) : null, performance.now()/1000); 
+}
+
+function updateFPS(now) {
+    frameCount++;
+    if (now - lastTimeFPS >= 1000) {
+        fpsBadge.textContent = `FPS: ${frameCount}`;
+        frameCount = 0;
+        lastTimeFPS = now;
+    }
+}
+
+// --- PROCESSING ---
+function drawAndProcess(pose, t) {
+    ctx.save(); ctx.clearRect(0,0,640,480); ctx.translate(640,0); ctx.scale(-1,1);
+    ctx.drawImage(video, 0, 0, 640, 480);
+    if(pose) {
+        drawSkeleton(pose);
+        processKinematics(pose, t);
+    }
+    ctx.restore();
+}
+
+function processKinematics(pose, t) {
+    const dt = t - (state.prevT || t); 
+    state.prevT = t;
+    
+    const defs = {
+        'r_shoulder': ['right_hip','right_shoulder','right_elbow'], 'l_shoulder': ['left_hip','left_shoulder','left_elbow'],
+        'r_elbow': ['right_shoulder','right_elbow','right_wrist'], 'l_elbow': ['left_shoulder','left_elbow','left_wrist'],
+        'r_hip': ['right_shoulder','right_hip','right_knee'], 'l_hip': ['left_shoulder','left_hip','left_knee'],
+        'r_knee': ['right_hip','right_knee','right_ankle'], 'l_knee': ['left_hip','left_knee','left_ankle'],
+    };
+
+    let frame = { time: state.isRecording ? t - state.startT : 0, raw:{}, smooth:{}, vels:{} };
+    ctx.font = "bold 16px Inter"; ctx.textAlign = "center"; ctx.fillStyle = "white";
+
+    for (let [key, pts] of Object.entries(defs)) {
+        const [a,b,c] = pts;
+        if(pose[a]?.score>.4 && pose[b]?.score>.4 && pose[c]?.score>.4) {
+            let angle = calculateAngle(pose[a], pose[b], pose[c]);
+            
+            // 1. Filter the Angle (Position)
+            let smoothAngle = angle;
+            if (state.useOneEuro) smoothAngle = state.filters[key].filter(angle, t);
+            
+            // 2. Calculate Raw Velocity
+            let currentVel = 0;
+            if(state.prevAngles[key] !== undefined && dt > 0.001) {
+                currentVel = (smoothAngle - state.prevAngles[key]) / dt;
+            }
+
+            // 3. FILTER THE VELOCITY (New Fix)
+            // Use Exponential Smoothing: 0.8 * oldVel + 0.2 * newVel
+            // This dampens the "jitter" spikes in the graph
+            let smoothVel = (state.currVels[key] || 0) * 0.8 + currentVel * 0.2;
+
+            // Store Data
+            frame.raw[key] = angle;
+            frame.smooth[key] = smoothAngle;
+            frame.vels[key] = smoothVel;
+            
+            // Save state for next frame
+            state.prevAngles[key] = smoothAngle;
+            state.currVels[key] = smoothVel;
+
+            if(state.showAngles) drawUnmirroredText(Math.round(smoothAngle)+"°", pose[b].x, pose[b].y - 20);
+            updateChart(key, 'angle', smoothAngle);
+            updateChart(key, 'velocity', smoothVel); // Graph the SMOOTH velocity
+            updatePhaseChart(key, smoothAngle, smoothVel);
+        }
+    }
+
+    // Process Neck
+    if(pose['nose'] && pose['left_shoulder'] && pose['right_shoulder']) {
+        const mid = {x:(pose['left_shoulder'].x+pose['right_shoulder'].x)/2, y:(pose['left_shoulder'].y+pose['right_shoulder'].y)/2};
+        const rawNeck = Math.abs(Math.atan2(pose['nose'].x-mid.x, mid.y-pose['nose'].y)*(180/Math.PI));
         
-        <section id="input-selection">
-            <h2>Select Input Source</h2>
-            <div class="input-options">
-                <button id="webcam-mode-button" class="active">Use Webcam</button>
-                <button id="upload-mode-button">Upload Video</button>
-            </div>
-            <div id="upload-controls" style="display: none;">
-                <input type="file" id="video-upload" accept="video/*">
-                <label for="video-upload" class="button">Choose Video File</label>
-                <span id="file-name-display">No file chosen</span>
-            </div>
-        </section>
-
-        <section id="video-section">
-            <h2>Live Feed / Video Playback</h2>
-            <video id="webcam-video" autoplay playsinline muted style="display: block;"></video>
-            <canvas id="pose-canvas"></canvas>
-            <div id="video-controls" style="display: none;">
-                <button id="play-pause-button">Play</button>
-                <input type="range" id="video-progress" min="0" value="0" step="0.01">
-                <span id="current-time">0:00</span> / <span id="total-time">0:00</span>
-            </div>
-            <button id="start-button">Start Pose Estimation</button>
-            <button id="stop-button" style="display: none;">Stop Estimation</button>
-        </section>
-
-        <section id="data-output">
-            <h2>Joint Kinematics</h2>
-            <div id="joint-data-display">
-                <p><strong>Right Knee Angle:</strong> <span id="right-knee-angle">--</span> degrees</p>
-                <p><strong>Left Hip Angle:</strong> <span id="left-hip-angle">--</span> degrees</p>
-                </div>
-            <button id="capture-data-button" disabled>Capture Snapshot</button>
-            <button id="export-csv-button" style="display: none;">Export Data (CSV)</button>
-        </section>
-
-        <section id="visualization-section" style="display: none;">
-            <h2>Kinematic Charts</h2>
-            <div class="chart-container">
-                <canvas id="right-knee-chart"></canvas>
-            </div>
-            <div class="chart-container">
-                <canvas id="left-hip-chart"></canvas>
-            </div>
-            </section>
-
-        <section id="instructions">
-            <h2>Instructions</h2>
-            <ul>
-                <li>Select "Use Webcam" or "Upload Video".</li>
-                <li>Position yourself/subject clearly in the view.</li>
-                <li>Click "Start Pose Estimation" to begin analysis.</li>
-                <li>Data will be displayed and charted in real-time or during video playback.</li>
-            </ul>
-        </section>
+        let smoothNeck = state.useOneEuro ? state.filters['neck'].filter(rawNeck, t) : rawNeck;
         
-    </main>
+        if(state.showAngles && !isNaN(smoothNeck)) drawUnmirroredText(Math.round(smoothNeck)+"°", mid.x, mid.y - 40, '#facc15');
+        
+        if(!isNaN(smoothNeck)) updateChart('neck', 'angle', smoothNeck);
+    }
 
-    <footer>
-        <p>&copy; 2025 Sport Science Project</p>
-    </footer>
+    if (state.isRecording) state.data.push(frame);
+}
 
-    <script src="main.js"></script>
+// --- VISUALIZATION HELPERS ---
+function drawSkeleton(pose) {
+    ctx.lineWidth=3; ctx.strokeStyle='rgba(59, 130, 246, 0.8)';
+    const cons=[['nose','left_eye'],['left_shoulder','right_shoulder'],['left_shoulder','left_elbow'],['left_elbow','left_wrist'],['right_shoulder','right_elbow'],['right_elbow','right_wrist'],['left_shoulder','left_hip'],['right_shoulder','right_hip'],['left_hip','left_knee'],['left_knee','left_ankle'],['right_hip','right_knee'],['right_knee','right_ankle']];
+    cons.forEach(([a,b])=>{ if(pose[a]?.score>.4 && pose[b]?.score>.4){ ctx.beginPath();ctx.moveTo(pose[a].x,pose[a].y);ctx.lineTo(pose[b].x,pose[b].y);ctx.stroke();}});
+    Object.values(pose).forEach(p=>{ if(p.score>.4){ ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(p.x,p.y,4,0,2*Math.PI);ctx.fill();}});
+    
+    // Neck Line (Yellow)
+    if(pose['nose']?.score>.4 && pose['left_shoulder']?.score>.4 && pose['right_shoulder']?.score>.4) {
+        const midX = (pose['left_shoulder'].x + pose['right_shoulder'].x) / 2;
+        const midY = (pose['left_shoulder'].y + pose['right_shoulder'].y) / 2;
+        ctx.strokeStyle = '#facc15'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(pose['nose'].x, pose['nose'].y); ctx.lineTo(midX, midY); ctx.stroke();
+    }
 
-    </body>
+    // CoM
+    if(state.showCoM) {
+        const com = calculateCoM(pose);
+        if(com) {
+            ctx.fillStyle = '#facc15'; ctx.beginPath(); ctx.arc(com.x, com.y, 8, 0, 2*Math.PI); ctx.fill();
+            ctx.strokeStyle='black'; ctx.lineWidth=2; ctx.stroke();
+        }
+    }
+}
+function calculateCoM(pose) {
+    const segs=[{m:0.5,p:['left_shoulder','right_hip']},{m:0.25,p:['right_hip','right_knee']},{m:0.25,p:['left_hip','left_knee']}];
+    let tx=0,ty=0,tm=0;
+    segs.forEach(s=>{ if(pose[s.p[0]]?.score>.4 && pose[s.p[1]]?.score>.4){
+        tx+=((pose[s.p[0]].x+pose[s.p[1]].x)/2)*s.m; ty+=((pose[s.p[0]].y+pose[s.p[1]].y)/2)*s.m; tm+=s.m;
+    }});
+    return tm?{x:tx/tm,y:ty/tm}:null;
+}
+function drawUnmirroredText(text, x, y, c='#fff') {
+    if(text.includes('NaN')) text = "--";
+    ctx.save(); ctx.translate(x, y); ctx.scale(-1, 1); 
+    ctx.shadowColor="rgba(0,0,0,0.8)"; ctx.shadowBlur=4; ctx.fillStyle=c; ctx.fillText(text, 0, 0); ctx.restore();
+}
+
+// --- CHART SYSTEM ---
+function toggleChart(key, type, label) {
+    const id = `${key}_${type}`;
+    const cb = document.getElementById(type === 'angle' ? `cb_ang_${key}` : `cb_vel_${key}`);
+    
+    if(cb.checked) {
+        if(state.charts[id]) return;
+        createCard(id, label, type);
+    } else {
+        removeCard(id);
+    }
+}
+function addPhasePlot() {
+    const key = document.getElementById('phaseSelect').value; if(key === 'none') return;
+    const id = `${key}_phase`; if(state.charts[id]) return;
+    createCard(id, `Phase: ${key}`, 'phase');
+}
+function createCard(id, label, type) {
+    document.getElementById('placeholder-text').style.display = 'none';
+    const card = document.createElement('div'); card.className = 'chart-card'; card.id = `card_${id}`;
+    card.innerHTML = `<h4>${label}</h4><button class="btn-close-chart" onclick="forceClose('${id}')">✕</button><div class="chart-container"><canvas></canvas></div>`;
+    dashboard.appendChild(card);
+    
+    // PRE-FILL DATA WITH NULLs so graph scrolls immediately
+    const initialData = Array(50).fill(null);
+    const initialLabels = Array(50).fill('');
+
+    state.charts[id] = new Chart(card.querySelector('canvas'), {
+        type: type === 'phase' ? 'scatter' : 'line',
+        data: { 
+            labels: initialLabels, 
+            datasets: [{ 
+                data: initialData, 
+                borderColor: type==='velocity'?'#10b981':(type==='phase'?'#8b5cf6':'#3b82f6'), 
+                backgroundColor: type==='phase'?'rgba(139, 92, 246, 0.2)':'transparent',
+                borderWidth: 2, pointRadius: 0, tension: 0.1, showLine: true
+            }] 
+        },
+        options: { 
+            responsive: true, maintainAspectRatio: false, animation: false, 
+            plugins:{legend:false}, 
+            scales: { 
+                x: { display: type==='phase', grid:{color:'#334155'} }, 
+                y: { grid:{color:'#334155'}, suggestedMin: type==='angle'?0:-100, suggestedMax: type==='angle'?180:100 } 
+            } 
+        }
+    });
+}
+function updateChart(key, type, val) {
+    const id = `${key}_${type}`;
+    if(state.charts[id]) {
+        state.charts[id].data.datasets[0].data.push(val);
+        state.charts[id].data.datasets[0].data.shift();
+        state.charts[id].update('none'); // 'none' mode for perf
+    }
+}
+function updatePhaseChart(key, ang, vel) {
+    const id = `${key}_phase`;
+    if(state.charts[id]) {
+        state.charts[id].data.datasets[0].data.push({x:ang, y:vel});
+        if(state.charts[id].data.datasets[0].data.length > 50) state.charts[id].data.datasets[0].data.shift();
+        state.charts[id].update('none');
+    }
+}
+function removeCard(id) {
+    if(state.charts[id]) { state.charts[id].destroy(); delete state.charts[id]; }
+    document.getElementById(`card_${id}`)?.remove();
+}
+function forceClose(id) {
+    const parts = id.split('_');
+    if(parts.length === 2 && parts[1] !== 'phase') {
+        const cb = document.getElementById(parts[1]==='angle' ? `cb_ang_${parts[0]}` : `cb_vel_${parts[0]}`);
+        if(cb) cb.checked = false;
+    }
+    removeCard(id);
+}
+
+// --- EXPORT ---
+let selectedFilter = 'raw';
+function openExportModal() { document.getElementById('exportModal').style.display = 'flex'; }
+function selectFilter(type) { 
+    selectedFilter = type; 
+    document.querySelectorAll('.filter-option').forEach(el => el.classList.remove('selected'));
+    document.querySelector(`input[value="${type}"]`).parentElement.parentElement.classList.add('selected');
+}
+function confirmExport() {
+    if(!state.data.length) return alert("No Data");
+    let csv="Time,Metric,Angle,Velocity\n";
+    state.data.forEach(r=>{ 
+        Object.keys(r.raw).forEach(k=>{ 
+            let val = r.raw[k];
+            if(selectedFilter === 'oneeuro') val = r.smooth[k];
+            if(selectedFilter === 'butter') val = (r.raw[k] + r.smooth[k])/2; // Sim
+            csv+=`${r.time.toFixed(3)},${k},${val.toFixed(2)},${r.vels[k]?.toFixed(2)}\n`; 
+        }); 
+    });
+    const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'})); a.download=`biodynamics_${selectedFilter}.csv`; a.click();
+    document.getElementById('exportModal').style.display = 'none';
+}
+
+// --- UTILS ---
+function toggleHud() { state.hudOpen = !state.hudOpen; document.getElementById('hud').classList.toggle('minimized', !state.hudOpen); }
+function toggleCapture() {
+    state.isRecording = !state.isRecording;
+    const btn = document.getElementById('toggleBtn');
+    if(state.isRecording) { state.startT=Date.now()/1000; state.data=[]; btn.textContent="Stop Recording"; btn.className="btn-danger"; document.getElementById('recBadge').style.display='block'; }
+    else { btn.textContent="Start Recording"; btn.className="btn-primary"; document.getElementById('recBadge').style.display='none'; document.getElementById('exportBtn').disabled=false; }
+}
+function normalizeTFJS(kp) { const d={}; kp.forEach(p=>d[p.name]={x:p.x,y:p.y,score:p.score}); return d; }
+function normalizeMediaPipe(lms) { const n=['nose','left_eye_inner','left_eye','left_eye_outer','right_eye_inner','right_eye','right_eye_outer','left_ear','right_ear','mouth_left','mouth_right','left_shoulder','right_shoulder','left_elbow','right_elbow','left_wrist','right_wrist','left_pinky','right_pinky','left_index','right_index','left_thumb','right_thumb','left_hip','right_hip','left_knee','right_knee','left_ankle','right_ankle','left_heel','right_heel','left_foot_index','right_foot_index']; const d={}; lms.forEach((p,i)=>{d[n[i]]={x:p.x*640,y:p.y*480,score:p.visibility}}); return d; }
+function calculateAngle(a, b, c) {
+    const v1 = {x:a.x-b.x, y:a.y-b.y}, v2 = {x:c.x-b.x, y:c.y-b.y};
+    const dot = v1.x*v2.x + v1.y*v2.y, mag = Math.sqrt(v1.x**2+v1.y**2)*Math.sqrt(v2.x**2+v2.y**2);
+    return Math.acos(dot/mag)*(180/Math.PI) || 0;
+}
+
+window.onload = init;
+</script>
+</body>
 </html>
