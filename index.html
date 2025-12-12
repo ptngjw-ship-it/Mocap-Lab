@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sport Science Pose Estimator</title>
+    <link rel="stylesheet" href="style.css">
+    
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/movenet"></script>
+    
+</head>
+<body>
+    
+    <header>
+        <h1>Kinematic Joint Analyzer (Pose Estimator)</h1>
+        <p>Analyze joint angles in real-time using your webcam.</p>
+    </header>
+
+    <main>
+        
+        <section id="video-section">
+            <h2>Live Feed</h2>
+            <video id="webcam-video" autoplay playsinline muted></video>
+            <canvas id="pose-canvas"></canvas>
+            <button id="start-button">Start Pose Estimation</button>
+        </section>
+
+        <section id="data-output">
+            <h2>Joint Kinematics</h2>
+            <div id="joint-data-display">
+                <p><strong>Right Knee Angle:</strong> <span id="right-knee-angle">--</span> degrees</p>
+                <p><strong>Left Hip Angle:</strong> <span id="left-hip-angle">--</span> degrees</p>
+                
+                </div>
+            
+            <button id="capture-data-button" disabled>Capture Snapshot</button>
+        </section>
+
+        <section id="instructions">
+            <h2>Instructions</h2>
+            <ul>
+                <li>Position yourself fully in the camera view.</li>
+                <li>Wait for the skeletal tracking overlay to appear.</li>
+                <li>Perform the desired movement (e.g., squat, jump) for analysis.</li>
+            </ul>
+        </section>
+        
+    </main>
+
+    <footer>
+        <p>&copy; 2025 Sport Science Project</p>
+    </footer>
+
+    <script src="main.js"></script>
+
+</body>
+</html>
