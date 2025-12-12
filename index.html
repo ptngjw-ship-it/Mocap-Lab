@@ -7,24 +7,44 @@
     <link rel="stylesheet" href="style.css">
     
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
-    
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/movenet"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
 </head>
 <body>
     
     <header>
         <h1>Kinematic Joint Analyzer (Pose Estimator)</h1>
-        <p>Analyze joint angles in real-time using your webcam.</p>
+        <p>Analyze joint angles in real-time from webcam or uploaded video.</p>
     </header>
 
     <main>
         
+        <section id="input-selection">
+            <h2>Select Input Source</h2>
+            <div class="input-options">
+                <button id="webcam-mode-button" class="active">Use Webcam</button>
+                <button id="upload-mode-button">Upload Video</button>
+            </div>
+            <div id="upload-controls" style="display: none;">
+                <input type="file" id="video-upload" accept="video/*">
+                <label for="video-upload" class="button">Choose Video File</label>
+                <span id="file-name-display">No file chosen</span>
+            </div>
+        </section>
+
         <section id="video-section">
-            <h2>Live Feed</h2>
-            <video id="webcam-video" autoplay playsinline muted></video>
+            <h2>Live Feed / Video Playback</h2>
+            <video id="webcam-video" autoplay playsinline muted style="display: block;"></video>
             <canvas id="pose-canvas"></canvas>
+            <div id="video-controls" style="display: none;">
+                <button id="play-pause-button">Play</button>
+                <input type="range" id="video-progress" min="0" value="0" step="0.01">
+                <span id="current-time">0:00</span> / <span id="total-time">0:00</span>
+            </div>
             <button id="start-button">Start Pose Estimation</button>
+            <button id="stop-button" style="display: none;">Stop Estimation</button>
         </section>
 
         <section id="data-output">
@@ -32,18 +52,28 @@
             <div id="joint-data-display">
                 <p><strong>Right Knee Angle:</strong> <span id="right-knee-angle">--</span> degrees</p>
                 <p><strong>Left Hip Angle:</strong> <span id="left-hip-angle">--</span> degrees</p>
-                
                 </div>
-            
             <button id="capture-data-button" disabled>Capture Snapshot</button>
+            <button id="export-csv-button" style="display: none;">Export Data (CSV)</button>
         </section>
+
+        <section id="visualization-section" style="display: none;">
+            <h2>Kinematic Charts</h2>
+            <div class="chart-container">
+                <canvas id="right-knee-chart"></canvas>
+            </div>
+            <div class="chart-container">
+                <canvas id="left-hip-chart"></canvas>
+            </div>
+            </section>
 
         <section id="instructions">
             <h2>Instructions</h2>
             <ul>
-                <li>Position yourself fully in the camera view.</li>
-                <li>Wait for the skeletal tracking overlay to appear.</li>
-                <li>Perform the desired movement (e.g., squat, jump) for analysis.</li>
+                <li>Select "Use Webcam" or "Upload Video".</li>
+                <li>Position yourself/subject clearly in the view.</li>
+                <li>Click "Start Pose Estimation" to begin analysis.</li>
+                <li>Data will be displayed and charted in real-time or during video playback.</li>
             </ul>
         </section>
         
@@ -55,5 +85,5 @@
 
     <script src="main.js"></script>
 
-</body>
+    </body>
 </html>
